@@ -44,34 +44,34 @@ class Co(object):
     def notice(self, s):
         return Fore.LIGHTWHITE_EX + Back.YELLOW + s + Fore.RESET + Back.RESET
 
-    def t0(self, s):
+    def p0(self, s):
         return Fore.BLACK + Back.LIGHTWHITE_EX + s + Fore.RESET + Back.RESET
 
-    def t1(self, s):
+    def p1(self, s):
         return Fore.LIGHTWHITE_EX + Back.GREEN + s + Fore.RESET + Back.RESET
 
-    def t2(self, s):
+    def p2(self, s):
         return Fore.LIGHTWHITE_EX + Back.BLUE + s + Fore.RESET + Back.RESET
 
-    def t3(self, s):
+    def p3(self, s):
         return Fore.LIGHTWHITE_EX + Back.MAGENTA + s + Fore.RESET + Back.RESET
 
-    def t4(self, s):
+    def p4(self, s):
         return Fore.LIGHTWHITE_EX + Back.YELLOW + s + Fore.RESET + Back.RESET
 
-    def t5(self, s):
+    def p5(self, s):
         return Fore.LIGHTWHITE_EX + Back.CYAN + s + Fore.RESET + Back.RESET
 
-    def t6(self, s):
+    def p6(self, s):
         return Fore.LIGHTWHITE_EX + Back.RED + s + Fore.RESET + Back.RESET
 
-    def t7(self, s):
+    def p7(self, s):
         return Fore.LIGHTWHITE_EX + Back.LIGHTBLUE_EX + s + Fore.RESET + Back.RESET
 
-    def t8(self, s):
+    def p8(self, s):
         return Fore.LIGHTWHITE_EX + Back.LIGHTBLACK_EX + s + Fore.RESET + Back.RESET
 
-    def tx(self, s):
+    def px(self, s):
         return Fore.BLACK + Back.LIGHTCYAN_EX + s + Fore.RESET + Back.RESET  # 进程太多啦→_→
 
 
@@ -80,26 +80,29 @@ class Pr(object):
     Make stdout easier.
     'Be filled with convenience.'
     """
-    def __init__(self, t, name='', s='Thread'):  # 用多线程还是多进程好呢……  ←反正还没有咯……
-        self.s = s + ' ' + str(t)
-        self.t = t
+    def __init__(self, p, name='', s='Process'):  # 用多线程还是多进程好呢……  ←反正还没有咯……
+        self.s = s + ' ' + str(p)
+        self.p = p
         self.name = name
 
     def pr(self, *s):
-        out = eval("co.t%d('%s') + co.white(' : ')" % (self.t, self.s))
+        name = self.name
+        out = eval("co.p%d('%s') + co.white(' : ')" % (self.p, self.s))
 
         for i in xrange(0, len(s), 2):
             if i + 1 < len(s):
                 q = s[i + 1]
             else:
                 q = 'white'
-            out += eval("co.%s('%s%s')" % (q, self.name, s[i]))
+            if i >= 2:
+                name = ''
+            out += eval("co.%s('%s%s')" % (q, name, s[i]))
 
         print out
 
 
 def prepare(list0):
-    """
+    u"""
     Convert an irregular list to a regular one.
     "You are so lazy."
     """
@@ -110,21 +113,21 @@ def prepare(list0):
     for a, b in enumerate(list0):
         b = b.strip()
 
-        if b == '':  # [跳过空行]
+        if b == '' or b.startswith('#') or b.startswith(';'):  # [跳过空行和注释]
             continue
         elif radd.search(b):  # [当前为网址，设为 a]
-            if not b.startswith('http://'):  # 补上网址前缀
+            if not b.startswith('http'):  # 补上网址前缀
                 b = 'http://' + b
             if q == 'abc' or q == 'acb' or q == 'n':  # 上一个已完成
                 l.append(b)
             elif q == 'ab':  # 缺少数字
                 l.extend(['', b])
             elif q == 'ac':  # 缺少目录
-                l.insert(len(l) - 1, 'Book' + str(bnum))
+                l.insert(len(l) - 1, 'Book%s\\' % str(bnum))
                 l.append(b)
                 bnum += 1
             elif q == 'a':  # 客官你好吝啬哦
-                l.extend(['Book' + str(bnum), '', b])
+                l.extend(['Book%s\\' % str(bnum), '', b])
                 bnum += 1
             q = 'a'
             continue
@@ -133,6 +136,8 @@ def prepare(list0):
             print 'List - Line %d is illegal: \n%s' % (a + 1, b)
             continue
         elif not rpat.search(b):  # [当前为目录，加上 b]
+            if not b.endswith('\\'):
+                b += '\\'  # 加上反斜杠
             q += 'b'
         elif b.isdigit():  # [当前为数字，加上 c]
             q += 'c'
@@ -156,10 +161,14 @@ def prepare(list0):
     if q == 'ab':  # 缺少数字
         l.append(1)
     elif q == 'ac':  # 缺少目录
-        l.insert(len(l)-1, 'Book' + str(bnum))
+        l.insert(len(l)-1, 'Book%s\\' % str(bnum))
     elif q == 'a':  # 客官你好吝啬哦
-        l.extend(['Book' + str(bnum), ''])
+        l.extend(['Book%s\\' % str(bnum), ''])
 
-    return l
+    list = []
+    for i in xrange(0, len(l), 3):
+        list.append([l[i], l[i+1], l[i+2]])
+
+    return list
 
 co = Co()
