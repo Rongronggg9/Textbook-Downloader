@@ -1,15 +1,15 @@
-# Textbook Downloader - ~~Dev~~
+# Textbook Downloader - ~~Beta~~
 ### 电子课本下载器
 ###### ~~好好学习，天天向上~~
 
 ## 说明
 
 * Python 2.7 ，在 Windows 下开发.
-* 使用了 requests 和 colorama 两个第三方库，`pip install requests` & `pip install colorama`.
+* 使用了 requests, colorama, bs4 三个第三方库.
 * 请在 `Config.ini` 里填一个**可写**的目录.
 * 请善待 `List.ini` 的格式，虽然写了自动判断和补全，也详细验证过，但是万一呢…   
-* 支持输入人教社书本阅读页 (请输入书本第一页)
-* 支持输入北师大社书目页、目录页、以及有规律的图片 URL (图片文件名没有随机字符串).
+* 支持输入人教社书目页、目录页以及书本阅读页 (请输入书本第一页).
+* 支持输入北师大社书目页、目录页以及有规律的图片 URL (图片文件名没有随机字符串).
 
 ```
 Line 1: 电子课本封面/扉页的网址 

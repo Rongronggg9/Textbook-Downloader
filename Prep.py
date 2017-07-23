@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import re
+
 from colorama import init, Fore, Back, ansi  # 第三方库
 
 init(autoreset=True, strip=False)
@@ -11,6 +12,7 @@ class Co(object):
     Colorize stdout.
     "There’s no RGB lighting."
     """
+
     def red(self, s):
         return Fore.LIGHTRED_EX + s + Fore.RESET
 
@@ -80,6 +82,7 @@ class Pr(object):
     Make stdout easier.
     'Be filled with convenience.'
     """
+
     def __init__(self, p, name='', s='Process'):  # 用多线程还是多进程好呢……  ←反正还没有咯……
         self.s = s + ' ' + str(p)
         self.p = p
@@ -87,8 +90,9 @@ class Pr(object):
 
     def pr(self, *s):
         name = self.name
-        out = eval("co.p%d('%s') + co.white(' : ')" % (self.p, self.s))
+        # out = eval("co.p%d('%s') + co.white(' : ')" % (self.p, self.s))
 
+        out = ' '
         for i in xrange(0, len(s), 2):
             if i + 1 < len(s):
                 q = s[i + 1]
@@ -98,11 +102,14 @@ class Pr(object):
                 name = ''
             out += eval("co.%s('%s%s')" % (q, name, s[i]))
 
+        out = out.decode('utf-8', 'ignore')  # 中文并不是个好主意x
+
         print out
+        # print type(out)
 
 
 def prepare(list0):
-    u"""
+    """
     Convert an irregular list to a regular one.
     "You are so lazy."
     """
@@ -123,11 +130,11 @@ def prepare(list0):
             elif q == 'ab':  # 缺少数字
                 l.extend(['', b])
             elif q == 'ac':  # 缺少目录
-                l.insert(len(l) - 1, 'Book%s\\' % str(bnum))
+                l.insert(len(l) - 1, 'Book%s/' % str(bnum))
                 l.append(b)
                 bnum += 1
             elif q == 'a':  # 客官你好吝啬哦
-                l.extend(['Book%s\\' % str(bnum), '', b])
+                l.extend(['Book%s/' % str(bnum), '', b])
                 bnum += 1
             q = 'a'
             continue
@@ -136,8 +143,8 @@ def prepare(list0):
             print 'List - Line %d is illegal: \n%s' % (a + 1, b)
             continue
         elif not rpat.search(b):  # [当前为目录，加上 b]
-            if not b.endswith('\\'):
-                b += '\\'  # 加上反斜杠
+            if not b.endswith('/'):
+                b += '/'  # 加上反斜杠
             q += 'b'
         elif b.isdigit():  # [当前为数字，加上 c]
             q += 'c'
@@ -150,7 +157,7 @@ def prepare(list0):
         elif q == 'ac' or q == 'abc':  # 网址付/网址目录付，当前为数字
             l.append(int(b))
         elif q == 'acb':  # 网址数字付，当前为目录
-            l.insert(len(l)-1, b)
+            l.insert(len(l) - 1, b)
         elif q == 'abb' or q == 'acc':  # 客官你好贪心哦
             q = q[:-1]
             print 'List - Line %d is illegal: \n%s' % (a + 1, b)
@@ -161,14 +168,15 @@ def prepare(list0):
     if q == 'ab':  # 缺少数字
         l.append(1)
     elif q == 'ac':  # 缺少目录
-        l.insert(len(l)-1, 'Book%s\\' % str(bnum))
+        l.insert(len(l) - 1, 'Book%s/' % str(bnum))
     elif q == 'a':  # 客官你好吝啬哦
-        l.extend(['Book%s\\' % str(bnum), ''])
+        l.extend(['Book%s/' % str(bnum), ''])
 
     list = []
     for i in xrange(0, len(l), 3):
-        list.append([l[i], l[i+1], l[i+2]])
+        list.append([l[i], l[i + 1], l[i + 2]])
 
     return list
+
 
 co = Co()
