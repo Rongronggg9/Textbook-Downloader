@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import re
-import requests  # 第三方库
-from requests.adapters import HTTPAdapter
-import os
 import ConfigParser
-import multiprocessing
+import os
+import re
+import urlparse
+
+import requests  # 第三方库
+from bs4 import BeautifulSoup as Soup  # 第三方库
+from requests.adapters import HTTPAdapter  # 第三方库
 
 import Prep
+
+# import multiprocessing
 
 req = requests.Session()
 req.mount('http://', HTTPAdapter(max_retries=1))
@@ -19,9 +23,9 @@ class Spider(object):
     def __init__(self, pid, path0, l, strict=1, s='Process'):
         self.pid = pid
         self.url = l[0]
-        self.name = l[1][:-1]
+        self.name = l[1][:-1].decode('utf-8', 'ignore')
         self.i = l[2]
-        self.path = path0 + l[1]
+        self.path = path0 + l[1].decode('utf-8', 'ignore')
         self.ph = Pr(pid, '%s - ' % self.name, s)
         self.s = s
         self.strict = strict
@@ -43,10 +47,10 @@ class Spider(object):
         ph = Pr(self.pid, '%s - ' % name, self.s)
 
         pic = req.get(picurl).content
-        flie = path + str(ia) + '.' + suf
-        with open(flie, 'wb') as fp:
+        file0 = path + str(ia) + '.' + suf
+        with open(file0, 'wb') as fp:
             fp.write(pic)
-        ph.pr('Downloaded %s to %s' % (picurl[7:], file), 'green')
+        ph.pr('Downloaded %s to %s' % (picurl[7:], file0), 'green')
 
     def done(self, ia, index, name=''):  # 完成提示
         i = self.i
@@ -61,10 +65,118 @@ class Spider(object):
             ret = 0
         return ret
 
-    def peppic(self):  # 人教社 处理图片页
+    def pepqaq(self):  # 区分书目页及目录页
         url = self.url
-        ia = self.ia
         ph = self.ph
+
+        try:
+            bookcontents = req.get(url).text
+            ph.pr('Matching book(s) at %s' % url[7:], 'cyan')
+        except:
+            ph.pr('Please check your network connection.', 'error')
+            return 0
+
+        soup = Soup(bookcontents, 'html.parser')
+        books0 = soup.find_all('td', width=True)
+
+        if books0:
+            ret = self.pepbooks(books0)
+        else:
+            ret = self.pepcontents()
+
+        return ret
+
+    def pepbooks(self, books0):  # 人教社 处理书目页
+        url = self.url
+        ph = self.ph
+
+        books = {}
+        for book in books0:  # 得到带名字的目录页字典
+            # print book
+            booka = book.find('a')
+            if not booka:
+                continue
+            bookurl = urlparse.urljoin(url, booka['href'])  # 相对路径→绝对路径
+            name = book.text
+            books[name] = bookurl
+
+        ret = 0
+        if not books:
+            ph.pr('Matched nothing at %s' % url[7:], 'error')
+            return 0
+
+        count = len(books)
+        ph.pr('Total matched book(s):%d' % count, 'magenta')
+        for name in books:
+            url = books[name]
+            path = self.path + name + '/'
+            ret += self.pepcontents('%s/%s' % (self.name, name), url, path)  # 调用处理目录页
+            self.ia = self.i  # 恢复计数
+
+        return [ret, count]
+
+    def pepcontents(self, name='', url='', path=''):
+        if name == '':
+            name = self.name
+        if url == '':
+            url = self.url
+        if path == '':
+            path = self.path
+        else:
+            if not os.path.isdir(path):
+                os.makedirs(path)  # 创建文件夹
+
+        ph = Pr(self.pid, '%s - ' % name, self.s)
+
+        try:
+            contents = req.get(url).text
+        except:
+            ph.pr('Please check your network connection.', 'error')
+            return 0
+
+        soup = Soup(contents, 'html.parser')
+
+        coverdivs = soup.find_all('div', class_="seperator20")  # 封面
+        for coverdiv in coverdivs:
+            if coverdiv.find('img'):
+                cover = urlparse.urljoin(url, coverdiv.img['src'])
+                self.save('#Cover', cover, name, path)
+
+        pages0 = soup.find_all('a', target="_blank")
+        if not pages0:
+            ph.pr('Matched nothing at %s' % url[7:], 'error')
+            return 0
+
+        rpage = re.compile(r'^.+_')
+        mpage0 = ''
+        pages = []
+        for page0 in pages0:
+            page1 = page0['href']
+            mpage = rpage.search(page1).group()
+            if not mpage == mpage0:
+                pages.append(page1)
+                mpage0 = mpage
+
+        ret = 0
+        for page in pages:
+            pageurl = urlparse.urljoin(url, page)
+            ret += self.peppic(name, pageurl, path)
+
+        return ret
+
+    def peppic(self, name='', url='', path=''):  # 人教社 处理图片页
+        if name == '':
+            name = self.name
+        if url == '':
+            url = self.url
+        if path == '':
+            path = self.path
+        else:
+            if not os.path.isdir(path):
+                os.makedirs(path)  # 创建文件夹
+
+        ia = self.ia
+        ph = Pr(self.pid, '%s - ' % name, self.s)
 
         try:
             urldivi = re.match(r'(http://.+/)(.+/)(\w+_)(\d+)(\.\w+)', url, re.I).groups()
@@ -80,30 +192,86 @@ class Spider(object):
         m = 0
 
         change += 5
-        while m < 16:
+        while m < 10:
             url = pre + str(change) + suf
+            change -= 1
 
             try:
-                html = req.get(url).text
+                html = req.get(url, allow_redirects=False)
             except:
                 ph.pr('Please check your network connection.', 'error')
                 return 0
-            rpic = re.compile(r'(<IMG .*?src="?\.?/)(W\d+?\.jpg)', re.I)
-            picurl1 = rpic.search(html)
-            if picurl1:
-                picurl = index + picurl1.group(2)
-                self.save(ia, picurl)
+            # rpic = re.compile(r'(<IMG .*?src="?)(\.?/W\d+?\.jpg)', re.I)
+            # picurl1 = rpic.search(html)
+
+            if html.status_code != 200:
+                ph.pr('No matched pic at %s' % url[7:], 'yellow')
+                m += 1
+                continue
+
+            html = html.text
+            soup = Soup(html, 'html.parser')
+            picurl1 = soup.find('div', id="doccontent")
+
+            if not picurl1:
+                ph.pr('No matched pic at %s' % url[7:], 'yellow')
+                m += 1
+                continue
+
+            picurl0 = picurl1.find('img')
+            if picurl0:
+                picurl = urlparse.urljoin(url, picurl0['src'])
+                self.save(ia, picurl, name, path)
                 ia += 1
                 m = 0
             else:
                 ph.pr('No matched pic at %s' % url[7:], 'yellow')
                 m += 1
 
-            change -= 1
-
-        ret = self.done(ia, index)
+        self.ia = ia - 1
+        ret = self.done(self.ia, index, name)
 
         return ret
+
+    def bnupbooks(self):  # 北师大社基教分社 处理书目页
+        url = self.url
+        ph = self.ph
+
+        try:
+            bookcontents = req.get(url).content.decode('utf-8')
+            ph.pr('Matching book(s) at %s' % url[7:], 'cyan')
+        except:
+            ph.pr('Please check your network connection.', 'error')
+            return 0
+
+        soup = Soup(bookcontents, 'html.parser')
+        div = soup.find('div', class_='lis_c')
+        books0 = div.find_all('a')  # 获取所有目录页
+
+        books = {}
+        for book in books0:  # 得到带名字的目录页字典
+            # print book
+            bookurl = urlparse.urljoin(url, book['href'])  # 相对路径→绝对路径
+            name = book.text
+            books[name] = bookurl
+
+        ret = 0
+        if books:
+            count = len(books)
+            ph.pr('Total matched book(s):%d' % count, 'magenta')
+            for name in books:
+                url = books[name]
+                path = self.path + name + '/'
+                fullname = '%s/%s' % (self.name, name)
+                ret += self.bnupcontents(fullname, url, path)  # 调用处理目录页
+
+            self.ia = self.i  # 恢复计数
+
+        else:
+            ph.pr('Matched nothing at %s' % url[7:], 'error')
+            return 0
+
+        return [ret, count]
 
     def bnupcontents(self, name='', url='', path=''):  # 北师大社基教分社 处理目录页
         if name == '':
@@ -150,11 +318,12 @@ class Spider(object):
             count = len(contenturls)
             rpic = re.compile(r'(\w{1,5}=["\']/?)(data/upload/\w+.{7,35}\.jpg)(["\'])', re.I)
             rpicname = re.compile(r'(/.+/)([a-z0-9]+)(_?.*?)(\.jpg)', re.I)
-            ph.pr('Matching pics in %d page(s), ' % count, 'yellow', 'it may take a few minutes before downloading.', 'red')
+            ph.pr('Matching pics in %d page(s), ' % count, 'yellow',
+                  'it may take a few minutes before downloading.', 'red')
 
             for i, pageurl in enumerate(contenturls):  # 依次检查图片页
                 pageurl = index + pageurl[1]
-                ph.pr('Matching pics at %s' % pageurl[7:], 'yellow', '    %d/%d' % (i+1, count), 'cyan')
+                ph.pr('Matching pics at %s' % pageurl[7:], 'yellow', '    %d/%d' % (i + 1, count), 'cyan')
                 html = req.get(pageurl).text
                 picurls = rpic.findall(html)
 
@@ -221,58 +390,20 @@ class Spider(object):
 
         return ret
 
-    def bnupbooks(self): # 北师大社基教分社 处理书目页
-        url = self.url
-        ph = self.ph
-        index = 'http://gbjc.bnup.com/'
-
-        try:
-            bookcontents = req.get(url).content.decode('utf-8')
-            ph.pr('Matching book(s) at %s' % url[7:], 'cyan')
-        except:
-            ph.pr('Please check your network connection.', 'error')
-            return 0
-
-        rbook = re.findall(
-            ur'(<a href=["\']/?)(reso\w+\.php\?classid=.{10,60})(["\'].{0,20}?>)((?:[一-龥]|\w| ){2,20})(<)',
-            bookcontents, re.I)
-
-        print rbook, bookcontents, isinstance(bookcontents, unicode)
-        if rbook:
-            books={}
-            for book in rbook:
-                books[book[3]] = book[1]
-
-            ret = count = 0
-            if books:
-                count = len(books)
-                ph.pr('Total matched book(s):%d' % count, 'magenta')
-                for name in books:
-                    url = index + books[name]
-                    path = self.path + name + '\\'
-                    ret += self.bnupcontents(name, url, path)
-
-                self.ia = self.i
-
-        else:
-            ph.pr('Matched nothing at %s' % url[7:], 'error')
-            return 0
-
-        return [ret, count]
-
-    def get(self):
+    def get(self):  # 分类调用
         url = self.url
         ph = self.ph
         rpep = re.search(r'pep\.com\.cn', url, re.I)
         rbnup = re.search(r'bnup\.com', url, re.I)
         rbnupcontents = re.search(r'resourcetype.+classid', url, re.I)
 
-        ret = count = 0
-
         ph.pr('Downloading from %s' % url[7:], 'magenta')
 
+        ret = count = 0
+        reta = None
+
         if rpep:
-            ret = self.peppic()
+            reta = self.pepqaq()
         elif rbnup:
             if url.endswith(r'.jpg'):
                 ret = self.bnuppic()
@@ -280,6 +411,11 @@ class Spider(object):
                 ret = self.bnupcontents()
             else:
                 reta = self.bnupbooks()
+
+        if reta:
+            if reta == 0:
+                ret = count = 0
+            else:
                 ret = reta[0]
                 count = reta[1]
 
@@ -290,13 +426,13 @@ class Spider(object):
 
 
 # ==========多进程=========
-def mul(pid, totalp, path0, l):
-    rec = 0
-    list = l[pid::totalp]
-    for a in list:
-        spider = Spider(pid, path0, a)
-        rec += spider.get()
-    return rec
+# def mul(pid, totalp, path0, l):
+#     rec = 0
+#     list = l[pid::totalp]
+#     for a in list:
+#         spider = Spider(pid, path0, a)
+#         rec += spider.get()
+#     return rec
 
 Pr = Prep.Pr
 
@@ -305,61 +441,64 @@ if __name__ == "__main__":
     try:
         print Prep.ansi.set_title('TextBook Downloader - Alpha')  # 窗口标题
     finally:
-        print 'TextBook Downloader - Alpha'
+        print '==========   TextBook Downloader - Alpha   ==========\n'
 
     f0 = Pr(0, '', 'Main   ')
     cf = ConfigParser.ConfigParser()
     cf.read('config.ini')
-    path0 = cf.get('Config', 'Path')
+    path0 = cf.get('Config', 'Path').replace('\\', '/')
     strict = cf.getint('Config', 'Strict')
-    try:
-        totalp = cf.getint('Config', 'ProcessNum')
-    except:
-        totalp = 0
+    # try:
+    #     totalp = cf.getint('Config', 'ProcessNum')
+    # except:
+    #     totalp = 0
+    #
+    # if totalp == 0:
+    #     totalp = multiprocessing.cpu_count()
 
-    if totalp == 0:
-        totalp = multiprocessing.cpu_count()
+    if not path0.endswith('/'):
+        path0 += '/'  # 加上反斜杠
 
-    if not path0.endswith('\\'):
-        path0 += '\\'  # 加上反斜杠
+    path0 = path0.decode('utf-8', 'ignore')
 
     with open('list.ini') as f:
         list0 = f.readlines()  # 读取列表
     l = Prep.prepare(list0)  # 处理列表
     count = len(l)  # 计数
 
-    if totalp > count:
-        totalp = count
+    # if totalp > count:
+    #     totalp = count
+    totalp = 1
 
-    f0.pr('Total URL(s): %d' % count)
-    f0.pr('Total process(es): %d' % totalp)
-    f0.pr(r'Save to: %s ' % path0.encode('string-escape'))
+    f0.pr(r'Total URL(s): %d' % count)
+    f0.pr(r'Total process(es): %d' % totalp)
+    f0.pr(r'Save to: %s ' % path0)
 
     rec = 0
     if totalp == 1:  # 单进程
         for a in l:
             spider = Spider(1, path0, a, strict, 'SingleP')
-            reca = spider.get()
-            rec += reca[0]
-            recc = reca[1]
+            recorigin = spider.get()
+            rec += recorigin[0]
+            recc = recorigin[1]
             if recc > 0:
                 count += recc - 1
 
-    else:  # 多进程
-        totalp = 1
-        multiprocessing.freeze_support()
-        pool = multiprocessing.Pool(totalp)
-        recs = []
-
-        for pid in xrange(totalp):
-            recp = pool.apply_async(mul, (pid, totalp, path0, l))
-            recs.append(recp)
-
-        pool.close()
-        pool.join()
-
-        for recp in recs:
-            rec += recp.get()
+    # else:  # 多进程
+    #     totalp = 1
+    #     multiprocessing.freeze_support()
+    #     pool = multiprocessing.Pool(totalp)
+    #     recs = []
+    #
+    #     for pid in xrange(totalp):
+    #         recp = pool.apply_async(mul, (pid, totalp, path0, l))
+    #         recs.append(recp)
+    #
+    #     pool.close()
+    #     pool.join()
+    #
+    #     for recp in recs:
+    #         rec += recp.get()
 
     if rec == count:
         s = 'Succeeded in downloading all books!'
@@ -371,7 +510,7 @@ if __name__ == "__main__":
         s = 'Neither success nor failure.'
         color = 'notice'
 
-    f0.pr(s, color)
     f0.pr('Finished.', color)
+    f0.pr(s, color)
     f0.pr('Succeeded: %d' % rec, color)
     f0.pr('Failed: %d' % (count - rec), color)
